@@ -1,0 +1,636 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>KPN presentation</title>
+
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/simple.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h2>Sentiment Analysis for Rebtel Online Reviews</h2>
+					<!-- <h4>Hamed Ghaemieh</h4> -->
+					<p>
+						Hamed Ghasemieh
+					</p>
+				</section>
+				<section>
+					<h2>Outline</h2>
+					<ul>
+						<li>Scraping the review website</li>
+						<li>Preprocessing</li>
+						<li>Sentiment Analysis and evaluation</li>
+					</ul>
+				</section>
+
+				<section>
+					<section>
+						<h2>Scraping the review website </h2>
+
+					</section>
+					<section>
+					<h3>Web Scraper</h3>
+					<ul>
+						<li>Chrome extension</li>
+						<li>Very intuitive and easy to work</li>
+						<li>Easy to export as csv</li>
+					</ul>
+
+					</section>
+					<section>
+						<img width="450"  src="imgs/trustpilot.png" alt="Smiley face">
+						<span class="fragment">
+						<img width="1150"  src="imgs/scrape_graph.png" alt="Smiley face">
+						</span>
+					</section>
+					<section>
+						<h3>Resulting Dataframe</h3>
+						<img width="1150"  src="imgs/scrape_df.png" alt="Smiley face">
+					</section>
+					<section>
+						<h3>Distribution of rates</h3>
+						<img width="700"  src="imgs/rate-bar.png" alt="Smiley face">
+					</section>
+				</section>
+
+				<section>
+					<section>
+						<h3>Preprocessing and prepration</h3>
+						<ol>
+							<li>Removing the stop words (the, a, is, as, ...)</li>
+							<li>Removing punctuation</li>
+							<li>Lemmatizing </li>
+								<ul>
+									<li>am, is, are --> be</li>
+									<li>book, books, book's --> book</li>
+								</ul>
+						</ol>
+					</section>
+					<section>
+						<p>Using <b>nltk</b> for preprocessing: </p>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+							from nltk.corpus import stopwords
+							from nltk.stem.wordnet import WordNetLemmatizer
+
+							stopwords_removed = ' '.join([
+								i for i in str(text).lower().split() 
+								if i not in stopwords
+								])
+							punct_removed = ''.join(
+								i for i in stopwords_removed 
+								if i not in set(string.punctuation
+								))
+							lemmatized = " ".join(
+								WordNetLemmatizer().lemmatize(i) 
+								for i in punct_removed.split()
+								)
+					    </code></pre>
+					  
+					</section>  	
+					<section>
+						<h3>Removal of Neutrals (3 ratings): </h3>
+						<font size="6">
+						<p align="left">
+						The goal is sentiment analysis. 
+						But reviews rated as 3 do not carry positive or negative meaning.
+						Hence for now I have decided to remove ratings of 3.
+						</p>
+					    </font>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						processed_df = processed_df[processed_df['rate'] != 3]
+						processed_df['pos'] = processed_df['rate'].
+								      apply(lambda x: 1 if x > 3 else 0)
+					    </code></pre>
+
+					</section>  
+					<section>
+						<h3>Train and test split: </h3>
+						<font size="6">
+						<p align="left">
+						Typical 70-30% train and test split.
+						</p>
+					    </font>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						X = processed_df['processed_text'].values
+						y = processed_df['pos']
+
+						from sklearn.model_selection import train_test_split
+
+						X_train, X_test, y_train, y_test = 
+							train_test_split(X, y, test_size=0.3, random_state=0)
+					    </code></pre>
+
+					</section> 
+				</section>
+
+				
+				<section>
+					<h3>Prediction of user rating based on reviews</h3>
+					<ul>
+						<li>Grid search of different (linear) classifiers</li>
+						<li>Word2vec (Doc2vec) approach</li>
+						<li>Training a regression model with ratings as target</li>
+					</ul>
+				</section>
+				<section>
+					<section>
+						<h3>Grid search of different (linear) classifiers</h3>
+						<font size="6">
+						<ul>
+							<li>Classifiers:</li>
+							<ul>
+								<li>Linear SVM</li>
+								<li>Logistic regression</li>
+								<li>Linear SVM with calibrated probabilities</li>							
+							</ul>
+							<li>Unigrams or bigrams</li>
+							<li>Use tfidf or not, (and its parameters)</li>
+							<li>Regularization: l1, l2, or Elasitic-net</li>
+							<li>Class weights: for unbalanced cases</li>
+						</ul>
+						</font>
+					</section>
+					<section>
+						<p align="left">Setting up pipeline and paramters:</p>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						pipeline = Pipeline([
+						    ('cvect', CountVectorizer()),
+						    ('tfidf', TfidfTransformer()),
+						    ('clf', SGDClassifier()),
+						])
+
+						param_grid = {
+						    'cvect__max_df': (0.5, 0.75, 1.0),
+						    'cvect__ngram_range': ((1, 1), (1, 2)), 
+						    'tfidf__use_idf': (True, False),
+						    'clf__loss': ('hinge', 'modified_huber', 'log'),
+						    'clf__alpha': (0.00001, 0.000001),
+						    'clf__penalty': ('l2', 'elasticnet'),
+						    'clf__class_weight': (None, 'balanced')
+						}		
+						</code></pre>
+						<p align="left">Starting the search over all the parameters:</p>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+							grid_search = GridSearchCV(pipeline, param_grid, 
+										   n_jobs=-1, verbose=1, cv=5)
+							grid_search.fit(X, y)
+					    </code></pre>
+					</section>
+					<section>
+						<h3>Result of parameter search</h3>
+						<ul>
+							<li>Best classifier: Logistic regression</li>
+							<li>Use tfidf</li>
+							<li>Regularization: elastic-net</li>
+							<li>Bigrams should be used</li>
+							<li>No use of class weights for balancing</li>
+						</ul>
+					</section>
+					<section>
+						<h3>Results (Linear classifiers)</h3>
+						<font size="6">
+						<p align="left">Confusion matrix:</p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>Negative</th>
+									<th>Positive</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">133</td>
+									<td align="center">30</td>
+								</tr>
+								<tr>
+									<td>Positive</td>
+									<td align="center">19</td>
+									<td align="center">436</td>
+								</tr>
+							</tbody>
+						</table>
+						<p> </p>
+						<p align="left">Classification report: </p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>precision</th>
+									<th>recall</th>
+									<th>f1-score</th>
+									<th>support</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">0.88</td>
+									<td align="center">0.82</td>
+									<td align="center">0.84</td>
+									<td align="center">163</td>
+								</tr>
+								<tr>
+									<td>Posative</td>
+									<td align="center">0.94</td>
+									<td align="center">0.96</td>
+									<td align="center">0.95 </td>
+									<td align="center">455</td>
+								</tr>
+								<tr>
+									<td>avg / total</td>
+									<td align="center">0.92</td>
+									<td align="center">0.92</td>
+									<td align="center">0.92 </td>
+									<td align="center">618</td>
+								</tr>
+							</tbody>
+						</table>
+						</font>
+					</section>
+				</section>
+				<section>
+					<section>
+						<h3>Words to Vectors</h3>
+						<img width="900"  src="imgs/w2v.png" alt="Smiley face">
+					</section>
+					<section>
+						<h3>Words to Vectors</h3>
+						<img width="500"  src="imgs/word2vec-gender-relation.png" alt="Smiley face">
+						<p>v(King) - v(Man) + v(Woman) = v(Queen)</p>
+					</section>
+					<section>
+						<p align="Left"><font size="6">1) Using <b>gensim</b> to load GloVe already trained model: </font> </p>
+					    <pre width="100%" ><code class="python" data-trim contenteditable>
+							with open(glove_embedding_path, "rb") as lines:
+							  for line in lines:
+							    word = str(line.split()[0])
+								vec = np.array(list(map(float, line.split()[1:])))
+								w2v[word] = vec
+					    </code></pre>
+
+					    <p align="Left"><font size="6">2) Using <b>gensim</b> to train based on our own data: </font> </p>
+					    <pre width="100%" ><code class="python" data-trim contenteditable>
+							model = gensim.models.Word2Vec(X, size=dim)
+							w2v = dict(zip(self.model.wv.index2word, self.model.wv.syn0))	
+					    </code></pre>
+
+					    <p align="Left"><font size="6">A document representation is then just the average of all its words:</font></p>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						doc_vec = np.array([np.mean([
+								w2v[w] for w in doc if w in w2v] or 
+								[np.zeros(dim)], axis=0)
+								])
+					    </code></pre>
+					    <span class="fragment">
+					    <p align="Left"><font size="6">Instead of averging we can also use <b>tf-idf</b> for smarter weights</font></p>
+					    </span>
+						
+					</section>
+					<section>
+						<h3>Results (w2v)</h3>
+						<font size="6">
+						<p align="left">Confusion matrix:</p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>Negative</th>
+									<th>Positive</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">133</td>
+									<td align="center">30</td>
+								</tr>
+								<tr>
+									<td>Positive</td>
+									<td align="center">52</td>
+									<td align="center">403</td>
+								</tr>
+							</tbody>
+						</table>
+						<p> </p>
+						<p align="left">Classification report: </p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>precision</th>
+									<th>recall</th>
+									<th>f1-score</th>
+									<th>support</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">0.71</td>
+									<td align="center">0.80</td>
+									<td align="center">0.75</td>
+									<td align="center">163</td>
+								</tr>
+								<tr>
+									<td>Posative</td>
+									<td align="center">0.92</td>
+									<td align="center">0.89</td>
+									<td align="center">0.90 </td>
+									<td align="center">455</td>
+								</tr>
+								<tr>
+									<td>avg / total</td>
+									<td align="center">0.87</td>
+									<td align="center">0.86</td>
+									<td align="center">0.86 </td>
+									<td align="center">618</td>
+								</tr>
+							</tbody>
+						</table>
+						</font>
+					</section>
+					<section>
+						<h4>Unfortunately word2vec results were not impressive</h4>
+						<!-- <font size="6"><p>(Mainly a majority classifier)</p></font> -->
+						<span class="fragment">
+							<img width="600"  src="imgs/w2v-pcs.png" alt="Smiley face">
+						</span>
+					</section>
+					
+				</section>
+				<section>
+					<section>
+						<h3>Regression approach</h3>
+						<ul>
+							<li>Ratings are ordinal variables (they can be compared)</li>
+							<li>Use ratings as regression target</li>
+							<li>Anything above 2.5 is considered positive, and else negative</li>
+						</ul>					
+						
+					</section>
+					<section>
+						<font size="6.5">
+						<p align="left">
+						Linear regression with ElasticNet as regularization method.
+						</p>
+					    </font>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						enet= ElasticNetCV(cv=5, l1_ratio=np.arange(0.1, 1.1, .1), 
+								   random_state=0, verbose=1, n_jobs=-1)
+
+						enet_pipeline = Pipeline([
+						    ('cvect', CountVectorizer()),
+						    ('tfidf', TfidfTransformer()),
+						    ('reg', enet)
+						])
+
+						enet_pipeline.fit(X_train, y_train)
+					    </code></pre>
+
+					</section> 
+
+					<section>
+						<h3>Results</h3>
+						<font size="6">
+						<p align="left">Confusion matrix:</p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>Negative</th>
+									<th>Positive</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">81</td>
+									<td align="center">82</td>
+								</tr>
+								<tr>
+									<td>Positive</td>
+									<td align="center">4</td>
+									<td align="center">451</td>
+								</tr>
+							</tbody>
+						</table>
+						<p> </p>
+						<p align="left">Classification report: </p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>precision</th>
+									<th>recall</th>
+									<th>f1-score</th>
+									<th>support</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">0.95</td>
+									<td align="center">0.50</td>
+									<td align="center">0.65</td>
+									<td align="center">163</td>
+								</tr>
+								<tr>
+									<td>Posative</td>
+									<td align="center">0.85</td>
+									<td align="center">0.99</td>
+									<td align="center">0.91 </td>
+									<td align="center">455</td>
+								</tr>
+								<tr>
+									<td>avg / total</td>
+									<td align="center">0.87</td>
+									<td align="center">0.86</td>
+									<td align="center">0.84 </td>
+									<td align="center">618</td>
+								</tr>
+							</tbody>
+						</table>
+						</font>
+					</section>
+					<section>
+						<h3>Probability calibration for regression model</h3>
+						<font size="6">
+						<ul>
+							<li>Modification of the naive threshold (2.5) aproach</li>
+							<li>What is the probability of a predicted rating to be positive?</li>
+							<li>We have to find a way to predict probabilities</li>
+							<p align="left"> Further from minimum ever predicted rating, higher the probability of being positive </p>
+							<li>we have to make sure these probabilities are <b>calibrated</b></li>
+							<p align="left"> i.e. a well calibrated (binary) classifier should classify the samples such that among the samples for which it predicted probability close to 0.8, approximately 80% actually belong to the that class.</p>
+						</ul>
+						</font>
+					</section>
+					<section>
+						<h3>Probability calibration</h3>
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+						enet = ElasticNetCV(cv=5, l1_ratio=np.arange(0.1, 1.1, .1))
+						enet_reg = RegressionClassifier(enet)
+						enet_reg.fit(X_train, y_train)
+
+						sigmoid = CalibratedClassifierCV(enet_reg, cv='prefit', 
+										 method='sigmoid')
+						sigmoid.fit(X_train, y_train_b)
+
+						y_pred = sigmoid.predict(X_test)
+						</code></pre>
+
+						<span class="fragment">
+						<font size="6">
+						<pre width="100%" ><code class="python" data-trim contenteditable>
+							class RegressionClassifier(BaseEstimator, ClassifierMixin):
+								def __init__(self, regressor):
+									self.regressor = regressor
+									self.classes_ = [0, 1]
+
+								def fit(self, X, y):
+									self.regressor.fit(X, y)
+
+								def predict(self, X):
+									return [1 if x > 2.5 else 0 for x in self.regressor.predict(X)]
+
+								# More the rating more the probability of being positive
+								def predict_proba(self, X):
+									prob_pos = self.regressor.predict(X)
+									prob_pos = (prob_pos - prob_pos.min()) / (prob_pos.max() - prob_pos.min())
+									return np.array([[1 - x, x] for x in prob_pos])
+						</code></pre>
+						</font>
+						</span>
+					</section>
+					<section>
+						<img width="670"  src="imgs/calibration.png" alt="Smiley face">
+					</section>
+					<section>
+						<h3>Results (calibrated regression)</h3>
+						<font size="6">
+						<p align="left">Confusion matrix:</p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>Negative</th>
+									<th>Positive</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">123</td>
+									<td align="center">40</td>
+								</tr>
+								<tr>
+									<td>Positive</td>
+									<td align="center">21</td>
+									<td align="center">434</td>
+								</tr>
+							</tbody>
+						</table>
+						<p> </p>
+						<p align="left">Classification report: </p>
+						<table>
+							<thead>
+								<tr>
+									<th></th>
+									<th>precision</th>
+									<th>recall</th>
+									<th>f1-score</th>
+									<th>support</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr>
+									<td>Negative</td>
+									<td align="center">0.85</td>
+									<td align="center">0.75</td>
+									<td align="center">0.80</td>
+									<td align="center">163</td>
+								</tr>
+								<tr>
+									<td>Posative</td>
+									<td align="center">0.92</td>
+									<td align="center">0.95</td>
+									<td align="center">0.93 </td>
+									<td align="center">455</td>
+								</tr>
+								<tr>
+									<td>avg / total</td>
+									<td align="center">0.90</td>
+									<td align="center">0.90</td>
+									<td align="center">0.90 </td>
+									<td align="center">618</td>
+								</tr>
+							</tbody>
+						</table>
+						</font>
+					</section>
+				</section>
+				<section>
+
+					<section>
+						<h3>What else to do?</h3>
+						<font size="6">
+						<ul>
+							<li>Take into account rating of 3 (maybe as a third neutral class)</li>
+							<li>Work more on word2vec</li>
+							<p> - get more data</p>
+							<p> - train on bigrams</p>
+							<li>Try different regression methods (regularizations) and then calibrate</li>
+						</ul>
+						</font>
+
+					</section>
+<!-- 					<section>
+						<p> Enhance the word2vec with K-means clustering?</p>
+						<img width="900"  src="imgs/k-means-w2v.png" alt="Smiley face">
+					</section>
+ -->				</section>
+				<section>
+					<h2>The End</h2>
+				</section>
+			</div>
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.js"></script>
+
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/notes/notes.js', async: true },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } }
+				]
+			});
+		</script>
+	</body>
+</html>
